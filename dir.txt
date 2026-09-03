@@ -1,0 +1,17 @@
+~/jxs/
+├── .claude/
+│   └── PRD-jxs.md          # tetap di sini, ini emang tempatnya
+├── vendor/                  # tools eksternal yang di-clone, bukan ditulis sendiri
+│   ├── linkfinder/          # clone dari github
+│   └── mantra/               # binary atau source
+├── src/                     # kode jxs sendiri, sesuai module breakdown 8c
+│   ├── capture/              # mitmproxy addon + playwright crawler
+│   ├── extraction/
+│   ├── techstack/
+│   ├── xss_advisor/
+│   └── ui/
+├── data/
+│   └── jxs_storage.db        # SQLite, gitignore ini
+├── tests/
+│   └── fixtures/             # 5-10 sample JS content buat validasi 8k (DOM_SINK_PATTERN)
+└── .gitignore                # wajib exclude data/*.db, vendor kalau gede

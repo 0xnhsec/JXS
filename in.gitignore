@@ -1,0 +1,40 @@
+# SQLite database — jangan di-commit, data sensitif bug bounty
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Vendor tools (clone terpisah)
+vendor/linkfinder/
+vendor/mantra/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg
+
+# Environment & secrets
+.env
+.env.*
+scope_config.json
+.claude/
+sample.json
+
+# Logs
+logs/
+*.log
+
+# Node / UI
+src/ui/node_modules/
+src/ui/dist/
+src/ui/.vite/
+
+# OS
+.DS_Store
+Thumbs.db

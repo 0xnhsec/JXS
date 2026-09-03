@@ -1,0 +1,5 @@
+written by: Bangkit Eldhianpranata ( Oxnhsec - Bughunter | L7 security enthusast )
+
+ini adalah kutipan atau sebuah ide yg saya buat untuk melakukan testing tools jxs ini, dmna aku memiliki iede untuk membuat web app yg berisi puluhan ribu baris code js termasuk js untuk fetch sebuah UI atau function utnuk logic web app tsb, untuk deployment aku akan taruh pada localhost atau host seperti netifly atau vercel.
+untuk skenario ini jxs akan melakukan scanning keseluruhan pada setiap pulurhan ribu / ratusan ribu baris code js yg vuln atau yang tidak, sebelum tahap pembuatan perlu namanya penetapan dan pemetakan pada setiap titik mana yg indikasi bug dan penjelasan, dengan ini ketika jxs mengidentifikasi misal ada 50ribu bug pada web ini namun dalam dokumentasi PRD jxst hanya terdapat sekitar 40ribu atau hanya 20rb saja itu sudah termasuk critical.|
+dokumen ini masih mentah belum tahap finalisasi utnuk menjelaskan dan menentukan konsep ini secara keseluruhan. Sekian terimakasih.

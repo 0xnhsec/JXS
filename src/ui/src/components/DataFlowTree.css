@@ -1,0 +1,215 @@
+/* DataFlowTree.css */
+
+.data-flow-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.data-flow-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  gap: 12px;
+}
+
+/* Header with Search & Stats */
+.data-flow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+}
+
+.search-input {
+  max-width: 420px;
+  font-size: 13px;
+  background: var(--bg-base);
+}
+
+.flow-stats {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 3 Columns Layout */
+.data-flow-columns {
+  display: grid;
+  grid-template-columns: 260px 320px 1fr;
+  flex: 1;
+  overflow: hidden;
+  divide-x: 1px solid var(--border);
+}
+
+.flow-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.column-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Items inside columns */
+.flow-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.flow-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.flow-item.active {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.flow-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.host-name, .js-filename {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.js-filename {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.flow-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.meta-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Findings column */
+.finding-item {
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--border);
+}
+
+.finding-sev-high { border-left-color: var(--sev-high); }
+.finding-sev-medium { border-left-color: var(--sev-medium); }
+.finding-sev-low { border-left-color: var(--sev-low); }
+.finding-sev-info { border-left-color: var(--sev-info); }
+
+.finding-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.finding-match {
+  font-size: 12px;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.finding-url-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.url-val {
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.finding-snippet {
+  font-size: 11px;
+  color: var(--text-code);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.copy-btn-tree {
+  font-size: 10px;
+  padding: 2px 6px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.empty-findings {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.icon-high {
+  color: var(--sev-high);
+}

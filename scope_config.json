@@ -1,0 +1,12 @@
+{
+  "scopes": [
+    {
+      "scope_name": "encoteki",
+      "host_whitelist": [
+        "passport.xellar.co", "encoteki.com", "beta.encoteki.com", "api-new.encoteki.com"
+      ],
+      "auth_cookie": null,
+      "host_list_file": null
+    }
+  ]
+}

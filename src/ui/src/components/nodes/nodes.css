@@ -1,0 +1,109 @@
+/* nodes.css — styles for all custom React Flow nodes */
+
+.jxs-node {
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  min-width: 160px;
+  max-width: 240px;
+  transition: border-color 150ms, box-shadow 150ms;
+  cursor: default;
+}
+
+.jxs-node:hover {
+  border-color: var(--border-strong);
+}
+
+.jxs-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── Severity borders ──────────────────────────────────────────────── */
+.node-sev-high {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.12);
+}
+.node-sev-high.selected {
+  border-color: var(--sev-high);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+.node-sev-medium { border-color: rgba(245, 158, 11, 0.4); }
+.node-sev-low    { border-color: rgba(107, 114, 128, 0.3); }
+.node-sev-info   { border-color: rgba(59, 130, 246, 0.3); }
+
+/* ── Specific node backgrounds ─────────────────────────────────────── */
+.jxs-node-jsfile   { background: #131825; }
+.jxs-node-endpoint { background: #0c1a15; min-width: 150px; max-width: 220px; }
+.jxs-node-sink     { background: #1a0d0d; }
+.jxs-node-sourcemap{ background: #1a0d0d; }
+.jxs-node-tech     { background: #140d22; min-width: 130px; max-width: 180px; }
+
+/* ── Node internals ────────────────────────────────────────────────── */
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.node-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.node-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.node-host { color: var(--text-muted); flex: 1; min-width: 0; }
+.node-size { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+.node-confidence { color: #8b5cf6; font-size: 11px; }
+.node-whitelisted {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.node-badge-row { margin-top: 6px; }
+
+.node-snippet {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  background: rgba(0,0,0,0.3);
+  border-radius: 4px;
+  padding: 4px 6px;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* ── Icons ──────────────────────────────────────────────────────────── */
+.node-icon        { color: var(--text-secondary); flex-shrink: 0; }
+.node-icon-endpoint { color: #34d399; flex-shrink: 0; }
+.node-icon-sink   { color: var(--sev-high); flex-shrink: 0; }
+.node-icon-tech   { color: #a78bfa; flex-shrink: 0; }
+.node-alert       { color: var(--sev-high); flex-shrink: 0; }
+.node-ok          { color: #34d399; flex-shrink: 0; }
+
+/* ── Handles ────────────────────────────────────────────────────────── */
+.jxs-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--border-strong) !important;
+  border: 1.5px solid var(--bg-elevated) !important;
+}
+
+.jxs-node:hover .jxs-handle,
+.jxs-node.selected .jxs-handle {
+  background: var(--accent) !important;
+}

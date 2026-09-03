@@ -1,0 +1,217 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   jxs — Design System & Global Styles
+   Font: Inter (UI), JetBrains Mono (code)
+   Theme: Dark mode, hacker aesthetic, glassmorphism accents
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Color tokens */
+  --bg-base:       #0a0b0e;
+  --bg-surface:    #111318;
+  --bg-elevated:   #1a1d26;
+  --bg-hover:      #22263a;
+  --bg-glass:      rgba(255, 255, 255, 0.04);
+
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text-primary:  #f0f2f7;
+  --text-secondary: #8b92a9;
+  --text-muted:    #4a5068;
+  --text-code:     #a8e6cf;
+
+  /* Severity colors */
+  --sev-high:      #ef4444;
+  --sev-high-bg:   rgba(239, 68, 68, 0.12);
+  --sev-medium:    #f59e0b;
+  --sev-medium-bg: rgba(245, 158, 11, 0.12);
+  --sev-low:       #6b7280;
+  --sev-low-bg:    rgba(107, 114, 128, 0.12);
+  --sev-info:      #3b82f6;
+  --sev-info-bg:   rgba(59, 130, 246, 0.12);
+
+  /* Accent */
+  --accent:        #6366f1;
+  --accent-hover:  #4f52cc;
+  --accent-glow:   rgba(99, 102, 241, 0.25);
+
+  /* Node type colors */
+  --node-jsfile:   #1e293b;
+  --node-endpoint: #064e3b;
+  --node-sink:     #450a0a;
+  --node-sourcemap:#450a0a;
+  --node-tech:     #2e1065;
+
+  /* Spacing */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+
+  /* Transitions */
+  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+code, pre, .mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+/* ── Utility classes ─────────────────────────────────────────────────────── */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+
+/* ── Severity badge ─────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge-high   { background: var(--sev-high-bg);   color: var(--sev-high);   border: 1px solid rgba(239,68,68,0.3); }
+.badge-medium { background: var(--sev-medium-bg); color: var(--sev-medium); border: 1px solid rgba(245,158,11,0.3); }
+.badge-low    { background: var(--sev-low-bg);    color: var(--sev-low);    border: 1px solid rgba(107,114,128,0.3); }
+.badge-info   { background: var(--sev-info-bg);   color: var(--sev-info);   border: 1px solid rgba(59,130,246,0.3); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-danger { background: var(--sev-high-bg); color: var(--sev-high); border-color: rgba(239,68,68,0.3); }
+.btn-danger:hover { background: rgba(239,68,68,0.2); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Card ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+/* ── Input ──────────────────────────────────────────────────────────────── */
+.input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 12px;
+  outline: none;
+  width: 100%;
+  transition: border-color var(--transition);
+}
+.input:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--text-muted); }
+
+/* ── Select ─────────────────────────────────────────────────────────────── */
+.select {
+  appearance: none;
+  background: var(--bg-elevated) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b92a9' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 32px 7px 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.select:focus { border-color: var(--accent); }
+
+/* ── Loader ─────────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader {
+  width: 20px; height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── React Flow overrides ───────────────────────────────────────────────── */
+.react-flow { background: var(--bg-base); }
+.react-flow__background { opacity: 0.4; }
+.react-flow__controls {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+.react-flow__controls-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  fill: var(--text-secondary);
+}
+.react-flow__controls-button:hover { background: var(--bg-hover); fill: var(--text-primary); }
+.react-flow__minimap {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.react-flow__edge-path { stroke: var(--border-strong); }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent); }

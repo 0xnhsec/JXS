@@ -1,0 +1,180 @@
+/* Toolbar.css */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.toolbar-left  { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.toolbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ── Logo ────────────────────────────────────────────────────────────── */
+.toolbar-logo {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.logo-text {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.04em;
+}
+.logo-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── Scope selector ──────────────────────────────────────────────────── */
+.scope-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.scope-icon { color: var(--text-muted); }
+.scope-selector .select { min-width: 180px; }
+
+/* ── View Mode Switcher ──────────────────────────────────────────────── */
+.view-mode-switcher {
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.view-mode-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.view-mode-btn.active {
+  color: var(--text-primary);
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+
+/* ── Stats row ───────────────────────────────────────────────────────── */
+.stats-row { display: flex; gap: 6px; align-items: center; }
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.stat-value { font-weight: 600; color: var(--text-primary); }
+.stat-pill-high   { border-color: rgba(239,68,68,0.3);   color: var(--sev-high); }
+.stat-pill-medium { border-color: rgba(245,158,11,0.3);  color: var(--sev-medium); }
+
+/* ── Run message ─────────────────────────────────────────────────────── */
+.run-msg {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Filter bar ──────────────────────────────────────────────────────── */
+.filter-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.filter-pills { display: flex; gap: 4px; }
+.filter-pill {
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-family: inherit;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.filter-pill:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.filter-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pill-high.active   { background: var(--sev-high);   border-color: var(--sev-high); }
+.pill-medium.active { background: var(--sev-medium); border-color: var(--sev-medium); }
+.pill-low.active    { background: var(--sev-low);    border-color: var(--sev-low); }
+.pill-info.active   { background: var(--sev-info);   border-color: var(--sev-info); }
+/* verify scope pill — amber when active */
+.filter-pill-verify.active {
+  background: rgba(251,191,36,0.18);
+  color: #fbbf24;
+  border-color: rgba(251,191,36,0.4);
+}
+.filter-select { min-width: 160px; }
+
+/* Active state for filter toggle btn */
+.btn-ghost.active { background: var(--accent-glow); color: var(--accent); border-color: rgba(99,102,241,0.3); }
+
+/* ── Review summary pills (PRD 8p-1) ────────────────────────────────── */
+.stat-pill-review-unrev {
+  border-color: rgba(245,158,11,0.35);
+  color: #f59e0b;
+}
+.stat-pill-review-bug {
+  border-color: rgba(34,197,94,0.35);
+  color: #22c55e;
+  gap: 5px;
+}
+.stat-pill-review-reported {
+  border-color: rgba(59,130,246,0.35);
+  color: #60a5fa;
+  gap: 5px;
+}
+
+/* ── Review filter pills ─────────────────────────────────────────────── */
+.pill-review-unreviewed.active    { background: #92400e; border-color: #f59e0b; color: #fde68a; }
+.pill-review-confirmed_bug.active { background: #14532d; border-color: #22c55e; color: #86efac; }
+.pill-review-reported.active      { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+.pill-review-checked_fp.active    { background: #1f2937; border-color: #6b7280; color: #d1d5db; }
+.pill-review-checked_benign.active{ background: #1f2937; border-color: #6b7280; color: #d1d5db; }
