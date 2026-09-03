@@ -30,6 +30,9 @@ sample.json
 logs/
 *.log
 
+# PoC export output (8t)
+targets/
+
 # Node / UI
 src/ui/node_modules/
 src/ui/dist/

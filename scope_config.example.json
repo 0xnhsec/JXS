@@ -1,0 +1,15 @@
+{
+  "scopes": {
+    "example-target": {
+      "name": "example-target",
+      "host_whitelist": [
+        "example.com",
+        "*.example.com"
+      ],
+      "test_only_hosts": [
+        "dev.example.com"
+      ],
+      "auth_cookie": ""
+    }
+  }
+}

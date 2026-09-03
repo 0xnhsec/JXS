@@ -3,7 +3,7 @@
 **Author:** Bangkit Eldhianpranata Pengestu (0xnhsec)
 **Status:** Draft v1
 **First Plan:** 2026-07-09 
-**Last updated:** 2026-07-25
+**Last updated:** 2026-09-03
 
 ---
 
@@ -19,7 +19,7 @@ LLM (Claude/Qwen/Gemini) tidak scalable untuk exhaustive pattern matching di bun
 
 ### TL;DR — Baca ini dulu kalau baru buka PRD ini setelah lama
 
-`jxs` adalah tool regex-based untuk narrowing JS analysis di bug bounty: capture JS via mitmproxy atau katana, ekstrak kandidat (endpoint, DOM sink, sourcemap, secret), visualisasi di React Flow graph, lalu triage manual. Bukan scanner otomatis — setiap finding tetap butuh verifikasi manual sesuai Validation Checklist (8u). Stack aktif: Python backend (FastAPI + SQLite), React UI, CLI (`jxs scan/status/export/review`). Status terakhir: semua komponen inti sudah live (8m CLI ✅, 8q katana ✅, 8s payload dict ✅, 8p-1 review UI ✅, 8t export ✅). Pending: 8u (Validation Checklist belum ada UI-nya, saat ini hanya teks di PRD), 8v (storage scaling open question), 8w (Insecure Storage Detection — backlog, unblocked).
+`jxs` adalah tool regex-based untuk narrowing JS analysis di bug bounty: capture JS via mitmproxy atau katana, ekstrak kandidat (endpoint, DOM sink, sourcemap, secret), visualisasi di React Flow graph, lalu triage manual. Bukan scanner otomatis — setiap finding tetap butuh verifikasi manual sesuai Validation Checklist (8u). Stack aktif: Python backend (FastAPI + SQLite), React UI, CLI (`jxs scan/status/export/review`). Status terakhir: semua komponen inti sudah live (8m CLI ✅, 8q katana ✅, 8s payload dict ✅, 8p-1 review UI ✅, 8t export ✅, 8u Validation Checklist ✅, 8w Insecure Storage ✅). Pending: 8v (storage scaling open question). Batch 2026-09: **8y — AI Triage Assistant** (LLM post-regex enrichment, lihat section 8y).
 
 ---
 
@@ -863,6 +863,100 @@ bukan otomatis (di luar kemampuan regex).
 
 **Status: Backlog, tidak diprioritaskan sebelum batch mode (86-host bug) selesai.**
 
+## 8y. AI Triage Assistant — LLM Post-Regex Enrichment (batch 2026-09)
+
+**Problem yang diselesaikan:** diagnosis di `feedback-claude.md` — rasio candidate-to-actual-bug tetap flat karena semua finding setara "string match pola" tanpa sinyal prioritas. Manual triage puluhan–ratusan finding per scope itu bottleneck waktu hunting. Section 8x sudah menyiapkan hook-nya (obfuscation → LLM handoff), tapi itu hanya menangani file yang regex-nya gagal total. 8y mengisi sisa ruangnya: **menyusun ulang prioritas finding yang regex BERHASIL temukan**, sebelum manusia membuka Validation Checklist (8u).
+
+**Posisi terhadap doktrin 1a (WAJIB dibaca dulu):** 8y TIDAK melanggar batasan "regex-only candidate finder" karena AI tidak pernah menerima bundle JS mentah untuk scanning. Alurnya:
+
+```
+regex extraction (sudah jalan) → kandidat ter-narrow (snippet ≤1200 char)
+    → 8y: LLM MENILAI kandidat itu (prioritas + kategori + langkah cek manual)
+    → hasil = HINT, bukan vonis → manusia tetap jalankan 8u checklist
+```
+
+LLM di sini adalah **narrowing layer kedua**, persis mengisi peran "mempersempit apa yang perlu ditinjau langsung" dari §1a. Yang berubah hanya efisiensi urutan triage, bukan definition-of-finding.
+
+### 8y.1 Jaminan "hasil benar" — correctness gates
+
+Permintaan user: AI harus "ngasih hasil benar setidaknya". Mekanisme konkretnya (semua diverifikasi programatik, bukan berharap model itu jujur):
+
+1. **Evidence gate (anti-halusinasi utama).** Model WAJIB mengutip bukti: field `evidence_quote` harus substring-exact dari `snippet` yang dikirim. Program memverifikasi dengan `quote in snippet` — kalau gagal → retry 1x dengan pesan error eksplisit → gagal lagi → assessment ditolak, batch dilanjutkan. Model tidak bisa mengarang endpoint/kode yang tidak ada di input.
+2. **Structured output + schema validation.** Output dipaksa JSON; field di luar enum (`priority` ∉ 1..5, `category` tidak dikenal, `confidence` ∉ 0..1) → invalid → retry → tetap invalid → skip dengan warning. Tidak ada partial write.
+3. **Finding ref binding.** Setiap kandidat diberi `ref` ("F12") di prompt; model harus mengembalikan `ref` yang valid. Mencegah model menilai finding yang tidak dikirim / mencampur antar finding.
+4. **Determinisme.** `temperature=0`. Penilaian ulang atas input sama harus menghasilkan output stabil.
+5. **Konservatif secara default.** Model tidak bisa: mengubah `severity`, mengubah `review_status`, memicu request apapun (Non-Goals §3 tetap berlaku). Output tertingginya hanyalah `priority` 1..5 + `recommended_checks` berupa TEKS langkah manual — tidak pernah auto-fire.
+6. **Idempoten + hemat biaya.** `finding_id` UNIQUE di tabel `ai_assessments`; re-run hanya memproses yang belum dinilai, `--force` untuk paksa ulang. Snippet di-truncate; batch per-file (maks 15 finding/request) supaya konteks tetap fokus dan biaya token terukur.
+
+### 8y.2 Konfigurasi — provider-agnostic (OpenAI-compatible)
+
+Satu client `httpx` ke endpoint OpenAI-compatible apa pun, dipilih lewat env var (API key **tidak pernah** masuk DB/JSON/git):
+
+```bash
+export JXS_AI_API_KEY="sk-..."                    # WAJIB
+export JXS_AI_BASE_URL="https://api.openai.com/v1"            # default
+export JXS_AI_MODEL="gpt-4o-mini"                              # default
+# Contoh provider lain:
+# Qwen (DashScope):  https://dashscope.aliyuncs.com/compatible-mode/v1 + qwen-plus
+# Gemini:            https://generativelanguage.googleapis.com/v1beta/openai + gemini-2.0-flash
+# OpenRouter:        https://openrouter.ai/api/v1 + model apa pun
+# Ollama lokal:      http://localhost:11434/v1 + qwen2.5:14b (tanpa API key)
+```
+
+Kalau `JXS_AI_API_KEY` tidak diset, `run_ai_triage()` mengembalikan summary `error` dengan instruksi set env — tidak pernah crash, tidak pernah menulis row kosong.
+
+### 8y.3 Skema storage — migration `8y_ai_triage`
+
+```sql
+CREATE TABLE IF NOT EXISTS ai_assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id) ON DELETE CASCADE,
+    priority INTEGER NOT NULL,             -- 1 = uji paling dulu … 5 = kemungkinan noise
+    category TEXT NOT NULL,                -- enum terkunci, lihat 8y.4
+    summary TEXT NOT NULL,                 -- 1–2 kalimat alasan (bahasa santai, untuk manusia)
+    evidence_quote TEXT NOT NULL,          -- WAJIB substring dari snippet (evidence gate)
+    recommended_checks TEXT,               -- JSON array string: langkah manual, tanpa payload auto-fire
+    confidence REAL NOT NULL,              -- self-report model 0..1; <0.5 ditandai needs_review di UI
+    model TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+### 8y.4 Kategori + semantik priority
+
+`category` enum: `auth_bypass_candidate`, `idor_bac_candidate`, `secret_exposure`, `sensitive_endpoint`, `debug_artifact`, `xss_exploitable`, `xss_defensive`, `config_leak`, `sourcemap_exposure`, `vendor_noise`, `benign`, `other`.
+
+| priority | arti | contoh tipikal |
+|---|---|---|
+| 1 | test duluan, nilai report tinggi | endpoint admin tak terlintas di traffic + tanpa auth check di sekitarnya |
+| 2 | layak diuji minggu ini | sourcemap hidup di bundle business logic |
+| 3 | simpan, uji kalau sempat | DOM sink dengan source tidak jelas |
+| 4 | kemungkinan besar benign | `setAttribute` di dalam helper sanitasi |
+| 5 | noise vendor/library | match di bundle vendor terklasifikasi (8o) |
+
+Context yang dikirim per finding: `type`, `match_value`, `severity`, `snippet` (±150 char hasil extractor, di-truncate 1200), `target_url`, `resolved_url`, host, `is_whitelisted`, label vendor classifier, `review_status`. Semua sudah ada di DB hari ini — tidak ada field baru yang dibutuhkan dari pipeline regex.
+
+### 8y.5 Permukaan integrasi
+
+- **API:** `POST /ai-triage/{scope}?limit=50&force=0` — mirror pola `POST /advisor/{scope}` (sync, blocking, summary dict). Detail `/js-file/{id}` dan daftar `/scope/{scope}/findings` di-LEFT JOIN `ai_assessments` supaya UI bisa nampilin priority tanpa endpoint baru.
+- **CLI:** `python -m src.cli.jxs_cli triage --scope X [--limit 50] [--force]` + token usage di output.
+- **UI:** tombol **AI Triage** di Toolbar (pola tombol Advisor), badge priority di `FindingRow`, dan kartu **AI Assessment** di `DetailPanel` (summary, evidence quote, recommended checks sebagai checklist baca-saja, tombol "pakai sebagai review_note" yang mengisi draft note — tetap human yang submit).
+
+### 8y.6 Known limitations (dokumentasi jujur, gaya 8w)
+
+1. **Evidence gate tidak menangkap misinterpretasi halus.** Quote bisa benar-benar ada di snippet tapi dibaca salah konteksnya oleh model (mis. mengira helper sanitasi adalah sink). Untuk itu confidence < 0.5 ditandai `needs_review`, dan `priority` TIDAK PERNAH otomatis mengubah urutan tampil default mencampur dengan verdict manusia — UI menampilkannya sebagai kolom terpisah.
+2. **File obfuscated (8x) → regex 0% coverage → 8y tidak punya bahan.** 8y bekerja SETELAH regex menemukan sesuatu. Untuk file yang regex-nya buta, jalur tetap 8x (LLM handoff export manual). Keduanya saling melengkapi, bukan tumpang tindih.
+3. **Biaya token tumbuh linear dengan finding baru.** Mitigasi: idempotensi + `--limit` + batch per-file. Estimasi kasar: 50 finding × ~600 token ≈ 30K token per scope per run penuh.
+4. **Model-dependent quality.** Gate 8y.1 menjamin output VALID, bukan output CERDAS. Model kecil bisa memberi priority flat (semua 3) — tetap valid, hanya kurang berguna. Ganti model = ganti env var, tanpa perubahan kode.
+
+### 8y.7 Definition of Done
+
+1. `run_ai_triage(scope)` idempoten: run 2x berturut-turut, run kedua memproses 0 finding baru.
+2. Mock LLM server test: (a) JSON rusak → 1 retry → assessment tetap masuk setelah retry sukses; (b) evidence_quote tidak ada di snippet → ditolak setelah retry, batch lanjut; (c) API key kosong → error summary, tanpa row baru.
+3. Live run di scope berisi fixture `tests/fixtures/*.js` → setiap row `ai_assessments` lolos `evidence_quote in snippet`.
+4. UI menampilkan badge priority + kartu assessment tanpa mengubah alur review manusia (8u tetap gerbang final).
+5. Token usage tercatat di output CLI/API per run.
+
 ## 9. Success Metric (Personal, bukan Business)
 
 - Waktu dari "buka target baru" sampai "punya list JS + endpoint + issue ter-flag" turun dari manual (jam) jadi di bawah 10 menit
@@ -882,6 +976,7 @@ Ringkasan status tiap komponen inti, supaya jelas mana yang sudah teruji vs masi
 | katana integration | ✅ **Selesai** — `jxs scan --katana-url --katana-depth` + scope enforcement 2-lapis | src/capture/katana_runner.py — filter_katana_output() verified, KATANA_BINARY auto-detect |
 | XSS Advisor payload dictionary | ✅ **Selesai** — 17 sink types, payload chips + testing steps di UI | 8s — XSS_ADVISOR_PAYLOADS, generate_advisory_full(), _enrich_advisories() |
 | CLI mode (8m) | ✅ **Selesai dibangun** — `jxs scan / status / export / review` | src/cli/jxs_cli.py — reuse run_extraction(), verified live |
+| AI Triage Assistant (8y) | 🚧 **Dibangun batch 2026-09** — LLM post-regex enrichment, evidence-verification gate | section 8y — src/ai_triage/ |
 
 **Progress tracker:** ~~8n~~ ✅ ~~8m~~ ✅ ~~8q~~ ✅ ~~8s~~ ✅ ~~8p-1~~ ✅ ~~8t~~ ✅
 
@@ -889,5 +984,6 @@ Ringkasan status tiap komponen inti, supaya jelas mana yang sudah teruji vs masi
 - **8u** — ~~Validation Checklist ada di PRD sebagai teks (section 8u), tapi belum ada implementasi UI-nya.~~ ✅ **Selesai** — `ValidationChecklist` component di DetailPanel: 5 langkah kondisional, auto-sync `review_status` ke API pada step 4 (confirmed_bug) & step 5 (reported), progress bar, outcome badges.
 - **8v** — Storage scaling open question. Belum ada keputusan soal retensi BLOB dan archive policy. Dapat ditinjau ulang setelah DB mulai terasa berat (>500MB).
 - **8w** — ~~Insecure Storage Detection. Backlog, unblocked, belum diprioritaskan. Draft pattern sudah ada di section 8w.~~ ✅ **Selesai** — 3 pattern tiers (HIGH JWT, MEDIUM keyword-set, LOW keyword-get), integrated ke EXTRACTION_PATTERNS + Advisor.
+- **8y** — AI Triage Assistant (batch 2026-09). Spesifikasi lengkap di section 8y: LLM sebagai narrowing layer kedua, provider-agnostic via env, evidence gate anti-halusinasi, tanpa auto-verdict.
 
 **Untuk hunting aktif sekarang:** `jxs scan --katana-url <target> --scope <name>` untuk discovery, lalu `jxs scan --scope <name> --format table --severity high` untuk triage, lalu `jxs review <id> confirmed_bug` + `jxs export --scope <name> --status confirmed_bug` untuk writeup.

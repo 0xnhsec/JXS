@@ -36,6 +36,7 @@ from src.extraction.patterns import (
     AUTH_FUNCTION_PATTERN,
     SECRET_WHITELIST_CONTEXT,
     HIGH_ENTROPY_PATTERN,
+    NAVIGATION_SINK_PATTERN,
 )
 from src.extraction.vendor_classifier import classify
 from src.xss_advisor.advisor import generate_advisory, SINK_ADVISORIES
@@ -87,14 +88,19 @@ class TestDomSinkPattern:
         assert "insertAdjacentHTML" in str(matches)
 
     def test_detects_location_href(self):
+        """location.href moved to NAVIGATION_SINK_PATTERN (PRD 8x revision,
+        patterns.py L177-184) — must NOT be a DOM sink anymore."""
         content = "location.href = redirectUrl;"
-        matches = DOM_SINK_PATTERN.findall(content)
-        assert "location.href" in str(matches)
+        assert len(DOM_SINK_PATTERN.findall(content)) == 0, \
+            "location.href must NOT match DOM_SINK_PATTERN (moved to navigation_sink)"
+        assert "location.href" in str(NAVIGATION_SINK_PATTERN.findall(content))
 
     def test_detects_window_open(self):
+        """window.open moved to NAVIGATION_SINK_PATTERN — must NOT be a DOM sink."""
         content = "window.open(url, '_blank');"
-        matches = DOM_SINK_PATTERN.findall(content)
-        assert "window.open" in str(matches)
+        assert len(DOM_SINK_PATTERN.findall(content)) == 0, \
+            "window.open must NOT match DOM_SINK_PATTERN (moved to navigation_sink)"
+        assert "window.open" in str(NAVIGATION_SINK_PATTERN.findall(content))
 
     def test_no_match_textContent(self):
         """textContent is NOT a DOM sink — should NOT match."""
@@ -111,9 +117,8 @@ class TestDomSinkPattern:
     def test_fixture_dom_sinks(self):
         """
         Run DOM_SINK_PATTERN against the full fixture file.
-        Expected: >= 8 TP (innerHTML, outerHTML, eval, document.write,
-                              dangerouslySetInnerHTML, insertAdjacentHTML,
-                              location.href, window.open)
+        Expected: >= 6 TP (innerHTML, outerHTML, eval, document.write,
+                              dangerouslySetInnerHTML, insertAdjacentHTML)
         False positives (textContent, innerText) should NOT be found.
 
         PRD 8f: FP rate must be < 20% of all matches.
@@ -126,11 +131,11 @@ class TestDomSinkPattern:
         for mv in match_values:
             print(f"  - {mv!r}")
 
-        # Known true positives expected
+        # Known true positives expected (location.href & window.open moved to
+        # NAVIGATION_SINK_PATTERN — not DOM sinks anymore)
         expected_tp = [
             "innerHTML", "eval", "dangerouslySetInnerHTML",
-            "document.write", "location.href", "insertAdjacentHTML",
-            "window.open", "outerHTML"
+            "document.write", "insertAdjacentHTML", "outerHTML"
         ]
 
         # Known false positives that must NOT appear
