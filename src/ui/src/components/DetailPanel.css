@@ -191,6 +191,28 @@
   flex-shrink: 0;
   cursor: default;
 }
+
+/* ── source_hint badge (PRD 8z.1) ────────────────────────────────────── */
+/* likely_tainted = amber (same family as --sev-medium), unknown = muted gray outline */
+.source-hint-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  cursor: default;
+  white-space: nowrap;
+}
+.source-hint-badge--tainted {
+  background: var(--sev-medium-bg);
+  color: var(--sev-medium);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.source-hint-badge--unknown {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
 .finding-row-detail {
   padding: 8px 10px 10px;
   border-top: 1px solid var(--border);

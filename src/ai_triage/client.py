@@ -44,9 +44,15 @@ def chat_json(
     messages: list[dict[str, str]],
     temperature: float = 0.0,
     timeout: float = 90.0,
+    transport: httpx.BaseTransport | None = None,
 ) -> tuple[str, dict[str, int]]:
     """
     Satu call /chat/completions. Return (content_text, usage_dict).
+
+    Args:
+        transport: httpx transport hook opsional (PRD 8z.2 poin 3 — testing
+            via httpx.MockTransport tanpa network). Default None = perilaku
+            lama (httpx.Client standar) — backward compatible.
 
     Raises:
         LLMError: setelah retry habis, atau error non-retryable (401/400/...).
@@ -62,7 +68,7 @@ def chat_json(
     last_error = "unknown"
     for attempt in range(len(RETRY_BACKOFF_SECONDS) + 1):
         try:
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(timeout=timeout, transport=transport) as client:
                 resp = client.post(url, headers=headers, json=payload)
 
             if resp.status_code == 200:

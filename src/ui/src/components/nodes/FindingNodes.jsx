@@ -29,21 +29,35 @@ export function EndpointNode({ data, selected }) {
 
 /* ── DOM Sink Node ────────────────────────────────────────────────────────── */
 export function DomSinkNode({ data, selected, onClick }) {
+  // PRD 8z.1 — source_hint proximity hint ('likely_tainted' | 'unknown' | null).
+  // Only 'likely_tainted' gets a visual cue: tiny amber dot, node already color-coded.
+  const tainted = data.source_hint === 'likely_tainted'
   return (
     <div
       className={`jxs-node jxs-node-sink node-sev-high ${selected ? 'selected' : ''}`}
       onClick={onClick}
       style={{ cursor: 'pointer' }}
+      aria-label={tainted ? `DOM sink ${data.match_value} — likely tainted source` : undefined}
     >
       <Handle type="target" position={Position.Left} className="jxs-handle" />
       <div className="node-header">
         <Zap size={13} className="node-icon-sink" />
-        <span className="node-title mono truncate" title={data.match_value}>
+        <span
+          className="node-title mono truncate"
+          title={tainted ? `${data.match_value} — likely tainted (PRD 8z.1)` : data.match_value}
+        >
           {data.match_value}
         </span>
       </div>
       <div className="node-meta">
         <span className="badge badge-high">DOM Sink</span>
+        {tainted && (
+          <span
+            className="source-hint-dot"
+            title="likely tainted — source attacker-controlled terdeteksi dalam window ±300 char (PRD 8z.1)"
+            aria-label="source hint: likely tainted"
+          />
+        )}
         {data.is_whitelisted && <span className="node-whitelisted">whitelisted</span>}
       </div>
       {data.snippet && (

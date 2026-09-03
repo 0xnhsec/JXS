@@ -271,6 +271,7 @@ export default function Toolbar({
             <button
               className={`filter-pill ${filters.include_whitelisted ? 'active' : ''}`}
               onClick={() => onFiltersChange({ ...filters, include_whitelisted: !filters.include_whitelisted })}
+              title="Include findings flagged as whitelisted in the graph — default hidden (parity dengan CLI --include-whitelisted)"
             >
               {filters.include_whitelisted ? 'Show' : 'Hide'}
             </button>

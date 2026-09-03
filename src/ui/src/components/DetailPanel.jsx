@@ -538,6 +538,24 @@ function FindingRow({ finding }) {
             P{ai.priority}
           </span>
         )}
+        {/* source_hint badge (PRD 8z.1) — proximity co-occurrence hint, bukan taint analysis.
+            Null untuk non-sink types → no badge. */}
+        {finding.source_hint === 'likely_tainted' && (
+          <span
+            className="source-hint-badge source-hint-badge--tainted"
+            title="Source attacker-controlled terdeteksi dalam window ±300 char (co-occurrence, bukan taint analysis — PRD 8z.1)"
+          >
+            likely tainted
+          </span>
+        )}
+        {finding.source_hint === 'unknown' && (
+          <span
+            className="source-hint-badge source-hint-badge--unknown"
+            title="Tidak ada source attacker-controlled dalam window ±300 char (PRD 8z.1)"
+          >
+            no source hint
+          </span>
+        )}
         {/* Stop propagation so copy click doesn't toggle expand */}
         <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center' }}>
           <CopyBtn text={finding.match_value} label="Copy" />

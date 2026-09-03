@@ -3,18 +3,21 @@ src/api/main.py
 FastAPI localhost API server for jxs UI.
 
 Endpoints:
-  GET  /health                        — server health check
-  GET  /scopes                        — list all configured scopes
-  POST /scopes                        — create/update a scope config
-  GET  /scope/{scope}/graph           — React Flow graph data (nodes + edges)
-  GET  /scope/{scope}/findings        — all findings with optional filters
-  GET  /scope/{scope}/stats           — summary counts for a scope
-  GET  /js-file/{id}                  — detail: JS file + findings + advisories
-  GET  /js-file/{id}/content          — raw JS content (for in-UI code viewer)
-  POST /extract/{scope}               — trigger extraction pipeline for a scope
-  POST /techstack/{scope}             — trigger tech detection for a scope
-  POST /advisor/{scope}               — trigger XSS advisor for a scope
-  POST /ai-triage/{scope}             — trigger AI triage for a scope (PRD 8y)
+  GET   /health                           — server health check
+  GET   /scopes                           — list all configured scopes
+  POST  /scopes                           — create/update a scope config
+  GET   /scope/{scope}/graph              — React Flow graph data (nodes + edges)
+  GET   /scope/{scope}/findings           — all findings with optional filters
+  GET   /scope/{scope}/stats              — summary counts for a scope
+  GET   /js-file/{id}                     — detail: JS file + findings + advisories
+  GET   /js-file/{id}/content             — raw JS content (for in-UI code viewer)
+  POST  /extract/{scope}                  — trigger extraction pipeline for a scope
+  POST  /techstack/{scope}                — trigger tech detection for a scope
+  POST  /advisor/{scope}                  — trigger XSS advisor for a scope
+  POST  /ai-triage/{scope}                — trigger AI triage for a scope (PRD 8y)
+  PATCH /findings/{finding_id}/review     — update review_status/note (PRD 8p-1)
+  GET   /scope/{scope}/review-summary     — review_status breakdown (PRD 8p-1)
+  GET   /db/stats                         — overall DB statistics
 
 Start with:
     uvicorn src.api.main:app --host 127.0.0.1 --port 8888 --reload
@@ -80,6 +83,8 @@ init_db(DB_PATH)
 class ScopeCreateRequest(BaseModel):
     scope_name: str
     host_whitelist: list[str]
+    # capture-only hosts — findings dari host ini auto-tagged verify_scope (PRD 4.2)
+    test_only_hosts: list[str] = []
     auth_cookie: Optional[str] = None
     host_list_file: Optional[str] = None
 
@@ -150,6 +155,7 @@ def list_scopes():
                 result.append({
                     "scope_name": scope_name,
                     "host_whitelist": [],
+                    "test_only_hosts": [],
                     "auth_cookie": None,
                     "host_list_file": None,
                     "js_file_count": count,
@@ -165,6 +171,7 @@ def create_scope(req: ScopeCreateRequest):
     sc = ScopeConfig(
         scope_name=req.scope_name,
         host_whitelist=req.host_whitelist,
+        test_only_hosts=req.test_only_hosts,
         auth_cookie=req.auth_cookie,
         host_list_file=req.host_list_file,
     )
@@ -213,6 +220,7 @@ def get_graph(scope: str):
             """
             SELECT f.id, f.js_file_id, f.type, f.match_value, f.severity, f.snippet,
                    f.is_whitelisted, f.resolved_url, f.target_url, f.review_status, f.review_note,
+                   f.source_hint,
                    j.verify_scope
             FROM findings f
             JOIN js_files j ON j.id = f.js_file_id
@@ -314,6 +322,8 @@ def get_graph(scope: str):
                         "target_url":    finding["target_url"],
                         "review_status": finding["review_status"] or "unreviewed",
                         "review_note":   finding["review_note"],
+                        # PRD 8z.1 — 'likely_tainted' | 'unknown' | NULL (sink types only)
+                        "source_hint":   finding["source_hint"],
                     },
                 ))
                 edges.append(GraphEdge(
@@ -421,7 +431,13 @@ def get_findings(
         if verify_scope_only:
             query += " AND j.verify_scope = 1"
 
-        query += f" ORDER BY f.severity DESC, f.created_at DESC LIMIT {limit} OFFSET {offset}"
+        # SQLite sorts severity alphabetically (medium > low > info > high) — known
+        # bug documented in src/ai_triage/triage.py; use explicit CASE rank instead.
+        query += (
+            " ORDER BY CASE f.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1"
+            " WHEN 'low' THEN 2 WHEN 'info' THEN 3 ELSE 4 END, f.created_at DESC"
+            f" LIMIT {limit} OFFSET {offset}"
+        )
 
         rows = conn.execute(query, params).fetchall()
         return {"findings": [dict(r) for r in rows], "count": len(rows)}
@@ -579,7 +595,12 @@ def get_js_file(file_id: int):
             raise HTTPException(status_code=404, detail=f"JS file id={file_id} not found")
 
         findings = conn.execute(
-            "SELECT * FROM findings WHERE js_file_id=? ORDER BY severity DESC",
+            """
+            SELECT * FROM findings WHERE js_file_id=? ORDER BY
+            CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1
+            WHEN 'low' THEN 2 WHEN 'info' THEN 3 ELSE 4 END,
+            created_at DESC
+            """,
             (file_id,)
         ).fetchall()
 

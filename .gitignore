@@ -3,9 +3,9 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 
-# Vendor tools (clone terpisah)
-vendor/linkfinder/
-vendor/mantra/
+# Vendor tools (clone terpisah, lihat vendor/README.md)
+vendor/*/
+!vendor/README.md
 
 # Python
 __pycache__/

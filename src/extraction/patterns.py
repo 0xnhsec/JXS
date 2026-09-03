@@ -265,3 +265,21 @@ EXTRACTION_PATTERNS: dict[str, tuple[re.Pattern, str]] = {
     "storage_set":            (INSECURE_STORAGE_SET_PATTERN, "medium"),  # keyword key in setItem
     "storage_get":            (INSECURE_STORAGE_GET_PATTERN, "low"),     # keyword key in getItem
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRD 8z.1 — Proximity source-sink heuristic (feedback-claude.md poin 2)
+# Windowed co-occurrence check, BUKAN taint analysis. Kalau salah satu source
+# attacker-controlled di bawah ini muncul dalam ±300 char di sekitar match sink,
+# finding dapat tag source_hint='likely_tainted'. Selain itu 'unknown'.
+# Catatan: location.href bisa jadi source ATAU sink — false-positive
+# likely_tainted mungkin terjadi bila href dipakai untuk operasi lain dalam
+# window yang sama. Dokumentasikan di UI tooltip (PRD 8z.1 poin 4).
+# ─────────────────────────────────────────────────────────────────────────────
+SOURCE_HINT_PATTERN = re.compile(
+    r"""(?:location\.(?:search|hash|href)|URLSearchParams|document\.referrer|"""
+    r"""window\.name|postMessage|document\.(?:URL|documentURI|baseURI))""",
+)
+
+# Tipe finding yang dapat tag source_hint (PRD 8z.1 aturan penerapan poin 1):
+# hanya 4 tipe sink di bawah — tipe lain → source_hint = NULL.
+SOURCE_HINT_SINK_TYPES = frozenset({"dom_sink", "new_function", "attr_sink", "navigation_sink"})

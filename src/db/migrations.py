@@ -214,6 +214,40 @@ def migration_8y_ai_triage(conn: sqlite3.Connection) -> dict:
     return {"table": "ok"}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration: 8z — source_hint proximity tag on findings (PRD 8z.1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def migration_8z_source_hint(conn: sqlite3.Connection) -> dict:
+    """
+    PRD 8z.1: kolom findings.source_hint — tag proximity source-sink.
+
+    Values: 'likely_tainted' | 'unknown' | NULL (non-sink types).
+    'likely_tainted' = ada source attacker-controlled dalam window ±300 char
+    di sekitar sink (windowed co-occurrence, BUKAN taint analysis).
+
+    Idempotent: guard pakai PRAGMA table_info — kolom yang sudah ada (mis. DB
+    fresh dibuat dari DDL schema.py yang sudah memuat source_hint) di-skip.
+    """
+    if _column_exists(conn, "findings", "source_hint"):
+        logger.debug("Column findings.source_hint already exists, skipping ALTER")
+    else:
+        conn.execute("ALTER TABLE findings ADD COLUMN source_hint TEXT")
+        conn.commit()
+        logger.info("Migration OK: ALTER TABLE findings ADD COLUMN source_hint")
+
+    # Index untuk filter UI "hanya likely_tainted" (PRD 8z.1)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_findings_source_hint ON findings(source_hint);"
+        )
+        conn.commit()
+        logger.info("Migration OK: CREATE INDEX idx_findings_source_hint")
+    except sqlite3.Error as exc:
+        logger.warning("source_hint index skipped: %s", exc)
+    return {"source_hint": "ok"}
+
+
 MIGRATIONS: list[tuple[str, callable]] = [
     ("8n_size_guard",       migration_8n_size_guard),
     ("8p_review_fields",    migration_8p_review_fields),
@@ -221,6 +255,7 @@ MIGRATIONS: list[tuple[str, callable]] = [
     ("8s_advisor_payloads", migration_8s_advisor_payloads),
     ("test_only_hosts",     migration_test_only_hosts),
     ("8y_ai_triage",        migration_8y_ai_triage),
+    ("8z_source_hint",      migration_8z_source_hint),
 ]
 
 

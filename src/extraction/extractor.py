@@ -46,6 +46,8 @@ from src.extraction.mantra_runner import (
 from src.extraction.patterns import (
     EXTRACTION_PATTERNS,
     SECRET_WHITELIST_CONTEXT,
+    SOURCE_HINT_PATTERN,
+    SOURCE_HINT_SINK_TYPES,
 )
 from src.extraction.vendor_classifier import classify
 
@@ -183,6 +185,19 @@ def extract_file(
                     severity = "info"
                     is_whitelisted = 1
 
+                # ── 5b. Proximity source-sink hint (PRD 8z.1) ─────────────
+                # Windowed co-occurrence, BUKAN taint analysis: reuse window
+                # `surrounding` (±300 char) yang sudah dihitung di atas.
+                # Berlaku HANYA untuk SOURCE_HINT_SINK_TYPES — tipe lain NULL.
+                if pattern_name in SOURCE_HINT_SINK_TYPES:
+                    source_hint = (
+                        "likely_tainted"
+                        if SOURCE_HINT_PATTERN.search(surrounding)
+                        else "unknown"
+                    )
+                else:
+                    source_hint = None
+
                 # ── 6. Vendor severity downgrade ──────────────────────────
                 if is_vendor and not is_whitelisted:
                     severity = _VENDOR_SEVERITY_MAP.get(severity, "info")
@@ -208,6 +223,7 @@ def extract_file(
                     "resolved_url":  url,                 # JS file URL — for Burp history lookup
                     "target_url":    target_url,           # PRD 8p — resolved resource URL
                     "review_status": "unreviewed",         # PRD 8p-1 — default
+                    "source_hint":   source_hint,          # PRD 8z.1 — 'likely_tainted'|'unknown'|None
                 })
         except re.error as exc:
             logger.error("[id=%d] regex error in pattern '%s': %s", js_file_id, pattern_name, exc)
@@ -224,6 +240,7 @@ def extract_file(
         row.setdefault("target_url", url)
         row.setdefault("review_status", "unreviewed")
         row.setdefault("review_note", None)
+        row.setdefault("source_hint", None)  # PRD 8z.1 — mantra rows lack it → NULL
 
     inserted = 0
     for row in findings_to_insert:
@@ -232,9 +249,11 @@ def extract_file(
                 """
                 INSERT INTO findings
                     (js_file_id, type, match_value, severity, line_number, snippet,
-                     is_whitelisted, resolved_url, target_url, review_status, review_note)
+                     is_whitelisted, resolved_url, target_url, review_status, review_note,
+                     source_hint)
                 VALUES (:js_file_id, :type, :match_value, :severity, :line_number, :snippet,
-                        :is_whitelisted, :resolved_url, :target_url, :review_status, :review_note)
+                        :is_whitelisted, :resolved_url, :target_url, :review_status, :review_note,
+                        :source_hint)
                 """,
                 row,
             )

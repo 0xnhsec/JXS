@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS findings (
     review_status TEXT NOT NULL DEFAULT 'unreviewed',
     -- review_status values: 'unreviewed' | 'checked_fp' | 'checked_benign' | 'confirmed_bug' | 'reported'
     review_note  TEXT,             -- PRD 8p-1: free-text manual note
+    source_hint  TEXT,             -- PRD 8z.1: proximity source-sink tag
+    -- source_hint values: 'likely_tainted' | 'unknown' | NULL (non-sink types)
+    -- 'likely_tainted' = source attacker-controlled terdeteksi dalam window
+    -- ±300 char di sekitar sink (windowed co-occurrence, BUKAN taint analysis)
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """

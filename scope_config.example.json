@@ -1,15 +1,18 @@
 {
-  "scopes": {
-    "example-target": {
-      "name": "example-target",
-      "host_whitelist": [
-        "example.com",
-        "*.example.com"
-      ],
-      "test_only_hosts": [
-        "dev.example.com"
-      ],
-      "auth_cookie": ""
+  "scopes": [
+    {
+      "scope_name": "example-target",
+      "host_whitelist": ["example.com"],
+      "test_only_hosts": ["dev.example.com"],
+      "auth_cookie": null,
+      "host_list_file": null
+    },
+    {
+      "scope_name": "second-target",
+      "host_whitelist": ["example.org"],
+      "test_only_hosts": [],
+      "auth_cookie": null,
+      "host_list_file": null
     }
-  }
+  ]
 }

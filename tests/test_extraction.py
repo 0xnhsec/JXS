@@ -12,14 +12,19 @@ PRD 8k Blocker:
   - DOM_SINK_PATTERN must be validated against real JS content
   - Test counts TP/FP/FN and asserts FP rate < 20%
 
+PRD 8z.1:
+  - Proximity source-sink heuristic — findings.source_hint
+    ('likely_tainted' | 'unknown' | NULL) via extract_file + temp DB
+
 Run:
-    cd /home/ardxcryz/jxs
     python -m pytest tests/test_extraction.py -v
 """
 
 from __future__ import annotations
 
+import hashlib
 import sys
+import uuid
 from pathlib import Path
 
 # ── Path bootstrap ────────────────────────────────────────────────────────────
@@ -37,6 +42,8 @@ from src.extraction.patterns import (
     SECRET_WHITELIST_CONTEXT,
     HIGH_ENTROPY_PATTERN,
     NAVIGATION_SINK_PATTERN,
+    SOURCE_HINT_PATTERN,
+    SOURCE_HINT_SINK_TYPES,
 )
 from src.extraction.vendor_classifier import classify
 from src.xss_advisor.advisor import generate_advisory, SINK_ADVISORIES
@@ -159,7 +166,7 @@ class TestDomSinkPattern:
 
         assert tp_count >= 6, f"Expected >= 6 TP detections, got {tp_count}: {detected_tp}"
         assert fp_count == 0, f"textContent/innerText must NOT match, got FP: {detected_fp}"
-        assert fp_rate < 0.20, f"FP rate {fp_rate:.1%} exceeds 20% threshold (PRD 8f)"
+        assert fp_rate < 0.20, f"FP rate {fp_rate:.1%} exceeds 20% threshold (PRD 8f/8k)"
 
     def test_fixture_minified(self):
         """DOM sinks should be found in minified content too."""
@@ -395,3 +402,200 @@ class TestOverallFPRate:
             )
         else:
             print("WARNING: No DOM sink matches found across all fixtures!")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRD 8z.1 — Proximity source-sink heuristic (source_hint) + migration 8z
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestSourceHintExtraction:
+    """
+    PRD 8z.1: finding sink dalam window ±300 char dari source attacker-
+    controlled → source_hint='likely_tainted'; sink tanpa source → 'unknown';
+    tipe non-sink → NULL. Windowed co-occurrence, BUKAN taint analysis.
+    """
+
+    @pytest.fixture
+    def tmp_db(self, tmp_path):
+        """DB temp fresh — init_db sudah jalanin semua migrasi (idempoten)."""
+        db = tmp_path / "test_8z1.db"
+        from src.db.schema import init_db
+        init_db(db)
+        return db
+
+    def _extract_content(self, tmp_db, content: str, url: str = "http://example.com/app.js"):
+        """Insert 1 js_files row + run extract_file → return findings rows."""
+        from src.db.schema import get_connection
+        from src.extraction.extractor import extract_file
+
+        content_bytes = content.encode("utf-8")
+        conn = get_connection(tmp_db)
+        try:
+            cur = conn.execute(
+                "INSERT INTO js_files (url, host, scope, content_hash, content, size_bytes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    url,
+                    "example.com",
+                    "test",
+                    hashlib.sha256(content_bytes + uuid.uuid4().bytes).hexdigest(),
+                    content_bytes,
+                    len(content_bytes),
+                ),
+            )
+            js_file_id = cur.lastrowid
+            extract_file(
+                js_file_id=js_file_id,
+                url=url,
+                content_bytes=content_bytes,
+                size_bytes=len(content_bytes),
+                conn=conn,
+            )
+            rows = conn.execute(
+                "SELECT id, type, match_value, source_hint, snippet "
+                "FROM findings WHERE js_file_id = ?",
+                (js_file_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def test_source_hint_pattern_compiles_and_matches(self):
+        """Sanity: SOURCE_HINT_PATTERN match sumber attacker-controlled."""
+        assert SOURCE_HINT_PATTERN.search("new URLSearchParams(location.search)")
+        assert SOURCE_HINT_PATTERN.search("document.referrer")
+        assert SOURCE_HINT_PATTERN.search("window.name")
+        assert SOURCE_HINT_PATTERN.search("event.data /* postMessage */")
+        assert not SOURCE_HINT_PATTERN.search("var greeting = 'hello world';")
+
+    def test_sink_types_constant(self):
+        """Berlaku HANYA untuk 4 tipe sink (PRD 8z.1 aturan poin 1)."""
+        assert SOURCE_HINT_SINK_TYPES == frozenset(
+            {"dom_sink", "new_function", "attr_sink", "navigation_sink"}
+        )
+
+    def test_dom_sink_near_source_is_likely_tainted(self, tmp_db):
+        """8z.6 DoD poin 1: sink + source dalam ±300 char → 'likely_tainted'."""
+        content = (
+            "function handleSearch() {\n"
+            "  const params = new URLSearchParams(location.search);\n"
+            "  const q = params.get('q');\n"
+            "  el.innerHTML = q;\n"
+            "}\n"
+        )
+        findings = self._extract_content(tmp_db, content)
+        dom_sinks = [f for f in findings if f["type"] == "dom_sink"]
+        assert dom_sinks, f"expected dom_sink finding, got: {[(f['type'], f['match_value']) for f in findings]}"
+        assert all(f["source_hint"] == "likely_tainted" for f in dom_sinks)
+
+    def test_dom_sink_far_from_source_is_unknown(self, tmp_db):
+        """8z.6 DoD poin 1: sink tanpa source di sekitar → 'unknown'."""
+        content = (
+            "var config = { version: '1.2.3' };\n"
+            'el.innerHTML = "static content";\n'
+            "var another = { debug: false };\n"
+        )
+        findings = self._extract_content(tmp_db, content)
+        dom_sinks = [f for f in findings if f["type"] == "dom_sink"]
+        assert dom_sinks, f"expected dom_sink finding, got: {[(f['type'], f['match_value']) for f in findings]}"
+        assert all(f["source_hint"] == "unknown" for f in dom_sinks)
+
+    def test_navigation_sink_near_source_is_likely_tainted(self, tmp_db):
+        """navigation_sink termasuk 4 tipe yang dapat tag (PRD 8z.1)."""
+        content = (
+            "const target = new URLSearchParams(location.search).get('next');\n"
+            "location.href = target;\n"
+        )
+        findings = self._extract_content(tmp_db, content)
+        nav_sinks = [f for f in findings if f["type"] == "navigation_sink"]
+        assert nav_sinks, f"expected navigation_sink finding, got: {[(f['type'], f['match_value']) for f in findings]}"
+        assert all(f["source_hint"] == "likely_tainted" for f in nav_sinks)
+
+    def test_endpoint_finding_source_hint_null(self, tmp_db):
+        """8z.6 DoD poin 1: endpoint (non-sink) → source_hint NULL."""
+        content = 'fetch("/api/v1/users", { method: "POST" });\n'
+        findings = self._extract_content(tmp_db, content)
+        assert findings, "expected endpoint/endpoint_fetch findings"
+        assert all(
+            f["type"] in ("endpoint", "endpoint_fetch") for f in findings
+        ), f"unexpected types: {[f['type'] for f in findings]}"
+        assert all(f["source_hint"] is None for f in findings)
+
+
+class TestMigration8zSourceHint:
+    """PRD 8z.1 — migration 8z_source_hint idempoten (fresh DDL + ALTER path)."""
+
+    def test_migration_idempotent_on_fresh_db(self, tmp_path):
+        """init_db (DDL baru sudah punya kolom) → run_all_migrations 2x tanpa error."""
+        from src.db.migrations import run_all_migrations
+        from src.db.schema import get_connection, init_db
+
+        db = tmp_path / "test_mig_8z.db"
+        init_db(db)   # DDL fresh sudah memuat source_hint → PRAGMA check skip ALTER
+        results1 = run_all_migrations(db)
+        results2 = run_all_migrations(db)  # run kedua — harus idempoten
+        assert results1["8z_source_hint"] == {"source_hint": "ok"}
+        assert results2["8z_source_hint"] == {"source_hint": "ok"}
+
+        conn = get_connection(db)
+        try:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(findings)").fetchall()]
+            assert "source_hint" in cols
+            idx = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_findings_source_hint'"
+            ).fetchone()
+            assert idx is not None, "idx_findings_source_hint harus dibuat"
+        finally:
+            conn.close()
+
+    def test_migration_alters_legacy_db(self, tmp_path):
+        """DB legacy (DDL lama TANPA kolom) → ALTER menambahkan source_hint."""
+        from src.db.migrations import run_all_migrations
+        from src.db.schema import get_connection
+
+        db = tmp_path / "test_mig_8z_legacy.db"
+        conn = get_connection(db)
+        try:
+            # Simulasi DB lama: findings tanpa kolom source_hint
+            conn.execute(
+                """
+                CREATE TABLE findings (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    js_file_id   INTEGER NOT NULL,
+                    type         TEXT    NOT NULL,
+                    match_value  TEXT    NOT NULL,
+                    severity     TEXT    NOT NULL DEFAULT 'info',
+                    line_number  INTEGER,
+                    snippet      TEXT,
+                    is_whitelisted INTEGER NOT NULL DEFAULT 0,
+                    resolved_url TEXT,
+                    target_url   TEXT,
+                    review_status TEXT NOT NULL DEFAULT 'unreviewed',
+                    review_note  TEXT,
+                    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        results = run_all_migrations(db)
+        assert results["8z_source_hint"] == {"source_hint": "ok"}
+
+        conn = get_connection(db)
+        try:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(findings)").fetchall()]
+            assert "source_hint" in cols
+            # values sesuai PRD 8z.1 — 'likely_tainted' | 'unknown' | NULL
+            conn.execute(
+                "INSERT INTO findings (js_file_id, type, match_value, source_hint) "
+                "VALUES (1, 'dom_sink', 'innerHTML', 'likely_tainted')"
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT source_hint FROM findings WHERE type='dom_sink'"
+            ).fetchone()
+            assert row["source_hint"] == "likely_tainted"
+        finally:
+            conn.close()

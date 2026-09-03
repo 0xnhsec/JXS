@@ -57,6 +57,13 @@ export default function App() {
       return false
     }
 
+    // Whitelisted findings — excluded unless include_whitelisted is ON
+    // (parity dengan CLI --include-whitelisted). Applies to any finding-carrying
+    // node with data.is_whitelisted (endpoint/domSink from the graph builder).
+    if (!filters.include_whitelisted && node.data.is_whitelisted) {
+      return false
+    }
+
     if (filters.severity !== 'all') {
       // For jsFile nodes, filter by worst_severity
       if (node.type === 'jsFile') {

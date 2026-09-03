@@ -11,6 +11,10 @@ Gate yang diverifikasi programatik (bukan berharap model jujur):
 
 Assessment yang gagal gate → tidak ditulis ke DB. Batch yang gagal total
 setelah 1 retry → di-skip dengan warning (disiplin mantra_runner).
+
+PRD 8z.1: konteks per finding ditambah field source_hint (proximity signal,
+windowed co-occurrence — BUKAN taint analysis) + penjelasan semantik di
+SYSTEM_PROMPT. Evidence gate TIDAK berubah.
 """
 
 from __future__ import annotations
@@ -87,7 +91,14 @@ that are priority 4-5. Your added value is telling them apart.
 4. Do NOT change severity or review status. You output hints only; the \
 human decides via the validation checklist.
 5. Respond with STRICT JSON only — no markdown fences, no commentary. \
-Shape: {"assessments": [ ...one object per input finding... ]}"""
+Shape: {"assessments": [ ...one object per input finding... ]}
+
+About "source_hint" (PRD 8z.1): it is a proximity signal, NOT taint analysis. \
+"likely_tainted" means an attacker-controlled source string (location.search/hash, \
+URLSearchParams, postMessage, document.referrer, window.name, etc.) appears within \
+±300 characters around the sink — windowed co-occurrence only. Use it as ONE input \
+for priority (raise it when consistent with the category), never as final proof; \
+null means the finding type is not an applicable sink."""
 
 
 def _finding_context(finding: dict[str, Any], vendor_label: str | None) -> dict[str, Any]:
@@ -104,6 +115,10 @@ def _finding_context(finding: dict[str, Any], vendor_label: str | None) -> dict[
         "host": finding.get("host"),
         "is_whitelisted": bool(finding.get("is_whitelisted")),
         "review_status": finding.get("review_status"),
+        # PRD 8z.1 — sinyal proximity source-sink ('likely_tainted'|'unknown');
+        # None → null di JSON (tipe non-sink). Bukan taint analysis — lihat
+        # penjelasan di SYSTEM_PROMPT. Evidence gate TIDAK berubah.
+        "source_hint": finding.get("source_hint"),
     }
     if vendor_label is not None:
         ctx["vendor_label"] = vendor_label

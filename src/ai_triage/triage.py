@@ -9,6 +9,13 @@ Alur (PRD 8y.5):
           → gagal validasi → 1 retry dengan pesan error → tetap gagal → skip
           → INSERT ai_assessments (idempoten: finding_id UNIQUE)
 
+PRD 8z.2 hardening:
+  - config error (env numerik malformed / key kosong) → summary error,
+    TIDAK PERNAH exception (poin 1)
+  - partial-batch rejection di-retry sekali sebagai sub-batch, hasil valid
+    di-merge (poin 2)
+  - content BLOB di-load lazy per file, bukan untuk semua row finding (poin 3)
+
 Disiplin mantra_runner: modul ini TIDAK PERNAH melempar exception ke caller.
 Semua kegagalan dikembalikan sebagai summary dict dengan status "error".
 """
@@ -53,8 +60,9 @@ def _select_findings(
         f"""
         SELECT f.id, f.type, f.match_value, f.severity, f.snippet,
                f.target_url, f.resolved_url, f.is_whitelisted, f.review_status,
+               f.source_hint,
                j.id AS js_file_id, j.url AS js_url, j.host,
-               j.is_beautified, j.size_bytes, j.content
+               j.is_beautified, j.size_bytes
         FROM findings f
         JOIN js_files j ON f.js_file_id = j.id
         WHERE j.scope = ?
@@ -84,26 +92,73 @@ def _vendor_label(row: dict) -> str | None:
         return None
 
 
+def _load_file_content(
+    conn: sqlite3.Connection, file_id: int, cache: dict[int, bytes | None]
+) -> bytes | None:
+    """
+    Ambil content js_files untuk 1 file id — di-cache per run.
+
+    PRD 8z.2 poin 3: content BLOB tidak lagi di-SELECT untuk SEMUA row
+    finding (cukup 1x per file untuk vendor label); di-load lazy di sini.
+    """
+    if file_id not in cache:
+        row = conn.execute(
+            "SELECT content FROM js_files WHERE id = ?", (file_id,)
+        ).fetchone()
+        cache[file_id] = row["content"] if row else None
+    return cache[file_id]
+
+
 def _batch_by_file(
-    findings: list[dict], max_per_request: int
+    conn: sqlite3.Connection,
+    findings: list[dict],
+    max_per_request: int,
 ) -> list[tuple[dict, list[dict], str | None]]:
     """
     Kelompokkan per js_file, pecah jadi batch ≤ max_per_request.
     Return list of (file_ctx, findings_in_batch, vendor_label).
+
+    PRD 8z.2 poin 3: content file di-load lazy (cached) — hanya dibutuhkan
+    untuk vendor label file pertama tiap grup (≤ VENDOR_CLASSIFY_SIZE_CAP).
     """
     files: dict[int, list[dict]] = {}
     for f in findings:
         files.setdefault(f["js_file_id"], []).append(f)
 
+    content_cache: dict[int, bytes | None] = {}
     batches: list[tuple[dict, list[dict], str | None]] = []
     for file_findings in files.values():
         first = file_findings[0]
         file_ctx = {"url": first["js_url"], "host": first["host"]}
-        label = _vendor_label(first)
+        content = _load_file_content(conn, first["js_file_id"], content_cache)
+        label = _vendor_label({
+            "js_url": first["js_url"],
+            "size_bytes": first["size_bytes"],
+            "content": content,
+        })
         for start in range(0, len(file_findings), max_per_request):
             chunk = file_findings[start : start + max_per_request]
             batches.append((file_ctx, chunk, label))
     return batches
+
+
+def _filter_to_refs(data: dict, refs: set[str]) -> dict:
+    """
+    Saring assessments ke ref tertentu saja (PRD 8z.2 poin 2).
+
+    Dipakai di round partial-retry: ref yang sudah valid di round sebelumnya
+    tidak dinilai ulang — hanya sisa yang ditolak yang divalidasi ulang.
+    """
+    items = data.get("assessments")
+    if not isinstance(items, list):
+        return data
+    return {
+        **data,
+        "assessments": [
+            it for it in items
+            if isinstance(it, dict) and it.get("ref") in refs
+        ],
+    }
 
 
 def _assess_batch(
@@ -116,10 +171,22 @@ def _assess_batch(
     timeout: float,
 ) -> tuple[list[dict], list[str], dict[str, int], bool]:
     """
-    Proses satu batch: call LLM → validate → retry sekali bila perlu.
+    Proses satu batch: call LLM → validate → retry. Total attempt ≤ 2.
+
+    PRD 8z.2 poin 2 — partial-batch retry: batch yang sebagian valid dan
+    sebagian ditolak TIDAK langsung selesai (dulu: ref yang ditolak
+    permanen ke-skip sampai --force). Sekarang ref yang ditolak di-retry
+    SEKALI sebagai sub-batch via build_retry_messages dengan error spesifik
+    per-ref; hanya ref itu yang di-validasi ulang; hasil valid di-merge.
+    Kalau sub-retry tetap gagal → skip seperti sebelumnya (disiplin sama).
 
     Returns:
         (valid_rows, errors, token_usage, used_retry)
+        valid_rows : semua row valid (round pertama + hasil merge retry)
+        errors     : error batch-level (LLM call / JSON parse) + error per-ref
+                     yang TETAP ditolak setelah round terakhir (kosong kalau
+                     semua ref akhirnya valid)
+        used_retry : True kalau round retry (full ATAU parsial) pernah jalan
     """
     file_ctx, chunk, label = batch
 
@@ -132,7 +199,11 @@ def _assess_batch(
 
     usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     used_retry = False
-    all_errors: list[str] = []
+    batch_errors: list[str] = []   # batch-level: LLM call / JSON parse
+    merged_valid: list[dict] = []
+    # PRD 8z.2 poin 2 — ref yang belum valid; awalnya semua, menyusut tiap
+    # round. Round retry cuma menilai ulang sisa ini.
+    pending_refs: set[str] = set(ref_to_finding)
 
     for attempt in range(2):
         try:
@@ -145,8 +216,8 @@ def _assess_batch(
                 timeout=timeout,
             )
         except LLMError as exc:
-            all_errors.append(f"LLM call gagal: {exc}")
-            return [], all_errors, usage_total, used_retry
+            batch_errors.append(f"LLM call gagal: {exc}")
+            return merged_valid, batch_errors, usage_total, used_retry
 
         for k in usage_total:
             usage_total[k] += usage.get(k, 0)
@@ -155,32 +226,48 @@ def _assess_batch(
             data = parse_model_json(raw)
         except (ValueError, json.JSONDecodeError) as exc:
             errors = [f"JSON parse gagal: {exc}"]
-            all_errors.extend(errors)
             if attempt == 0:
                 messages = build_retry_messages(messages, raw, errors)
                 used_retry = True
                 continue
-            return [], all_errors, usage_total, used_retry
+            return merged_valid, batch_errors + errors, usage_total, used_retry
+
+        # PRD 8z.2 poin 2 — round retry hanya menilai ulang ref yang masih
+        # pending; jawaban untuk ref yang sudah valid diabaikan (tidak
+        # di-merge dobel — finding_id UNIQUE).
+        if attempt == 1:
+            data = _filter_to_refs(data, pending_refs)
 
         valid_rows, errors = validate_assessments(data, ref_to_finding)
 
-        missing = set(ref_to_finding) - {
+        answered = {
             r.get("ref") for r in data.get("assessments", []) if isinstance(r, dict)
         }
+        missing = pending_refs - answered
         if missing:
-            errors.append(f"finding tanpa assessment: {sorted(missing)}")
+            errors = errors + [f"finding tanpa assessment: {sorted(missing)}"]
 
-        if not valid_rows:
-            all_errors.extend(errors)
-            if attempt == 0:
-                messages = build_retry_messages(messages, raw, errors)
-                used_retry = True
-                continue
-            return [], all_errors, usage_total, used_retry
+        merged_valid.extend(valid_rows)
+        valid_ids = {row["finding_id"] for row in valid_rows}
+        pending_refs -= {
+            ref for ref, f in ref_to_finding.items() if f["id"] in valid_ids
+        }
 
-        return valid_rows, errors, usage_total, used_retry
+        if not pending_refs:
+            # Semua ref akhirnya valid — error round ini tidak relevan lagi.
+            return merged_valid, batch_errors, usage_total, used_retry
 
-    return [], all_errors, usage_total, used_retry  # pragma: no cover
+        if attempt == 0:
+            # PRD 8z.2 poin 2 — satu round retry (full kalau semua ditolak,
+            # parsial kalau sebagian sudah valid) dengan error per-ref.
+            messages = build_retry_messages(messages, raw, errors)
+            used_retry = True
+            continue
+
+        # attempt == 1 dan masih ada pending → skip permanen (disiplin lama)
+        return merged_valid, batch_errors + errors, usage_total, used_retry
+
+    return merged_valid, batch_errors, usage_total, used_retry  # pragma: no cover
 
 
 def run_ai_triage(
@@ -201,9 +288,22 @@ def run_ai_triage(
     Returns:
         Summary dict — TIDAK PERNAH raise (disiplin mantra_runner).
     """
-    cfg = load_config()
+    # PRD 8z.2 poin 1 — config DI DALAM alur error-handling: env numerik
+    # malformed TIDAK PERNAH jadi exception (dulu: JXS_AI_TIMEOUT=abc →
+    # uncaught ValueError → HTTP 500). Key kosong → hint lengkap;
+    # env malformed → pesan per-var dari config_errors.
+    try:
+        cfg = load_config()
+    except Exception as exc:  # pylint: disable=broad-except  (defensif — load_config sendiri sudah never-raise)
+        logger.error("load_config unexpected error: %s", exc)
+        return {"status": "error", "error": f"config error: {exc}"}
+
     if not cfg.is_configured:
-        return {"status": "error", "error": missing_config_hint()}
+        error_parts: list[str] = []
+        if not cfg.api_key:
+            error_parts.append(missing_config_hint())
+        error_parts.extend(cfg.config_errors)
+        return {"status": "error", "error": "\n".join(error_parts)}
 
     summary: dict = {
         "status": "done",
@@ -251,7 +351,7 @@ def run_ai_triage(
             )
             return summary
 
-        batches = _batch_by_file(findings, cfg.max_findings_per_request)
+        batches = _batch_by_file(conn, findings, cfg.max_findings_per_request)
         summary["batches"] = len(batches)
 
         for batch in batches:

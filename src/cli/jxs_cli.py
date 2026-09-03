@@ -334,8 +334,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
         if args.review_status:
             query += " AND f.review_status = ?"
             params.append(args.review_status)
+        # PRD 8z.5 — HIGH_ENTROPY FP-prone, hidden by default
+        if not args.include_low_confidence:
+            query += " AND f.type != 'high_entropy'"
 
-        query += " ORDER BY f.severity DESC, f.created_at DESC"
+        # SQLite sorts severity alphabetically (medium > low > info > high) — known
+        # bug documented in src/ai_triage/triage.py; use explicit CASE rank instead.
+        query += (
+            " ORDER BY CASE f.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1"
+            " WHEN 'low' THEN 2 WHEN 'info' THEN 3 ELSE 4 END, f.created_at DESC"
+        )
         if args.limit:
             query += f" LIMIT {args.limit}"
 
@@ -493,8 +501,15 @@ def cmd_export(args: argparse.Namespace) -> int:
         if args.status:
             query += " AND f.review_status = ?"
             params.append(args.status)
+        # PRD 8z.5 — HIGH_ENTROPY FP-prone, hidden by default
+        if not args.include_low_confidence:
+            query += " AND f.type != 'high_entropy'"
 
-        query += " ORDER BY f.severity DESC, f.id"
+        # Alphabetical severity bug — same CASE fix as scan (mirror ai_triage)
+        query += (
+            " ORDER BY CASE f.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1"
+            " WHEN 'low' THEN 2 WHEN 'info' THEN 3 ELSE 4 END, f.id"
+        )
         rows = conn.execute(query, params).fetchall()
         findings = [dict(r) for r in rows]
 
@@ -688,6 +703,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan.add_argument("--severity", help="Filter by severity (high/medium/low/info)")
     p_scan.add_argument("--review-status", dest="review_status", help="Filter by review status")
     p_scan.add_argument("--include-whitelisted", dest="include_whitelisted", action="store_true")
+    p_scan.add_argument("--include-low-confidence", dest="include_low_confidence",
+                        action="store_true",
+                        help="Sertakan finding high_entropy (FP-prone, PRD 8z.5)")
     p_scan.add_argument("--limit", type=int, help="Max findings to return")
 
     # ── status ────────────────────────────────────────────────────────────────
@@ -701,6 +719,9 @@ def build_parser() -> argparse.ArgumentParser:
                           choices=REVIEW_STATUS_VALUES, help="Filter by review status")
     p_export.add_argument("--include-source", dest="include_source", action="store_true",
                           help="Also export raw source.js per JS file")
+    p_export.add_argument("--include-low-confidence", dest="include_low_confidence",
+                          action="store_true",
+                          help="Sertakan finding high_entropy (FP-prone, PRD 8z.5)")
 
     # ── review ────────────────────────────────────────────────────────────────
     p_review = sub.add_parser("review", help="Update review_status for a finding")
