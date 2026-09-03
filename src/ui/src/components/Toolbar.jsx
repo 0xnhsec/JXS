@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { RefreshCw, Play, Cpu, Shield, ChevronDown, Filter, Target, Network, Layers, CheckCircle, Bug } from 'lucide-react'
+import { RefreshCw, Play, Cpu, Shield, ChevronDown, Filter, Target, Network, Layers, CheckCircle, Bug, Sparkles } from 'lucide-react'
 import { api } from '../api'
 import './Toolbar.css'
 
@@ -63,6 +63,7 @@ export default function Toolbar({
       if (action === 'extract')   res = await api.triggerExtract(scope)
       if (action === 'techstack') res = await api.triggerTechstack(scope)
       if (action === 'advisor')   res = await api.triggerAdvisor(scope)
+      if (action === 'ai')        res = await api.triggerAiTriage(scope)
       setRunMsg(`✓ ${label}: ${JSON.stringify(res.summary)}`)
       onRefresh()
     } catch (err) {
@@ -204,6 +205,16 @@ export default function Toolbar({
         >
           {running === 'Advisor' ? <div className="loader" style={{width:14,height:14}} /> : <Shield size={14} />}
           Advisor
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={() => runPipeline('ai', 'AI Triage')}
+          disabled={!scope || running !== null}
+          title="AI Triage — LLM prioritization hints for unreviewed findings (PRD 8y). Requires JXS_AI_API_KEY on the server."
+          id="run-ai-btn"
+        >
+          {running === 'AI Triage' ? <div className="loader" style={{width:14,height:14}} /> : <Sparkles size={14} />}
+          AI Triage
         </button>
 
         {/* Refresh */}

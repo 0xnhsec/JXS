@@ -690,3 +690,121 @@
   border-radius: 999px;
   flex-shrink: 0;
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PRD 8y — AI Triage Assistant
+   Badge P1..P5 + AI Assessment card. Warna prioritas: 1 merah (uji dulu),
+   2 oranye, 3 kuning, 4/5 abu-abu (kemungkinan benign/noise).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.ai-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+.ai-p1 { color: #f87171; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); }
+.ai-p2 { color: #fb923c; background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.3); }
+.ai-p3 { color: #facc15; background: rgba(234, 179, 8, 0.10); border: 1px solid rgba(234, 179, 8, 0.28); }
+.ai-p4 { color: #9ca3af; background: rgba(107, 114, 128, 0.12); border: 1px solid rgba(107, 114, 128, 0.28); }
+.ai-p5 { color: #6b7280; background: rgba(75, 85, 99, 0.14); border: 1px solid rgba(75, 85, 99, 0.3); }
+
+.ai-assessment-card {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  background: rgba(148, 163, 184, 0.05);
+}
+.ai-card-p1 { border-left-color: #ef4444; }
+.ai-card-p2 { border-left-color: #f97316; }
+.ai-card-p3 { border-left-color: #eab308; }
+.ai-card-p4 { border-left-color: #6b7280; }
+.ai-card-p5 { border-left-color: #4b5563; }
+
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  color: #cbd5e1;
+}
+.ai-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ai-card-category {
+  font-size: 10px;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.ai-needs-review {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.ai-card-summary {
+  font-size: 12px;
+  color: #d1d5db;
+  margin: 8px 0 6px;
+  line-height: 1.5;
+}
+
+.ai-evidence {
+  font-size: 10.5px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 4px;
+  padding: 7px 9px;
+  margin: 4px 0 8px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #cbd5e1;
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+.ai-checks {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+}
+.ai-check {
+  font-size: 11.5px;
+  color: #b8c1cf;
+  line-height: 1.55;
+  margin-bottom: 3px;
+}
+
+.ai-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ai-card-meta {
+  font-size: 10px;
+  color: #6b7280;
+  font-family: 'JetBrains Mono', monospace;
+}
+.ai-draft-btn {
+  font-size: 10.5px;
+  padding: 3px 8px;
+  gap: 5px;
+}

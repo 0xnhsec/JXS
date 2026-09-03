@@ -172,12 +172,55 @@ def migration_test_only_hosts(conn: sqlite3.Connection) -> dict:
     return {"verify_scope_added": added}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration: 8y — AI Triage Assistant (PRD section 8y)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def migration_8y_ai_triage(conn: sqlite3.Connection) -> dict:
+    """
+    PRD 8y: ai_assessments table — LLM triage hints per finding.
+
+    finding_id UNIQUE = idempotency: re-run only assesses findings that
+    don't have a row yet. Rows are HINTS (priority/category/rationale),
+    never verdicts — review_status stays human-controlled (PRD 1a/8p-1).
+
+    Idempotent: safe dijalankan berkali-kali.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            finding_id INTEGER NOT NULL UNIQUE REFERENCES findings(id) ON DELETE CASCADE,
+            priority INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            evidence_quote TEXT NOT NULL,
+            recommended_checks TEXT,
+            confidence REAL NOT NULL,
+            model TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+        """
+    )
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ai_assessments_priority "
+            "ON ai_assessments(priority);"
+        )
+    except sqlite3.Error as exc:
+        logger.warning("ai_assessments priority index skipped: %s", exc)
+    conn.commit()
+    logger.info("Migration 8y: ai_assessments table OK")
+    return {"table": "ok"}
+
+
 MIGRATIONS: list[tuple[str, callable]] = [
     ("8n_size_guard",       migration_8n_size_guard),
     ("8p_review_fields",    migration_8p_review_fields),
     ("review_index",        migration_add_review_index),
     ("8s_advisor_payloads", migration_8s_advisor_payloads),
     ("test_only_hosts",     migration_test_only_hosts),
+    ("8y_ai_triage",        migration_8y_ai_triage),
 ]
 
 

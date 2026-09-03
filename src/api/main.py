@@ -14,6 +14,7 @@ Endpoints:
   POST /extract/{scope}               — trigger extraction pipeline for a scope
   POST /techstack/{scope}             — trigger tech detection for a scope
   POST /advisor/{scope}               — trigger XSS advisor for a scope
+  POST /ai-triage/{scope}             — trigger AI triage for a scope (PRD 8y)
 
 Start with:
     uvicorn src.api.main:app --host 127.0.0.1 --port 8888 --reload
@@ -38,6 +39,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from src.ai_triage.triage import run_ai_triage
 from src.capture.config import ScopeConfig, ScopeRegistry
 from src.db.schema import DEFAULT_DB_PATH, get_connection, get_db_stats, init_db
 from src.extraction.extractor import run_extraction
@@ -398,9 +400,12 @@ def get_findings(
     conn = get_connection(DB_PATH)
     try:
         query = """
-            SELECT f.*, j.url as js_url, j.host, j.verify_scope
+            SELECT f.*, j.url as js_url, j.host, j.verify_scope,
+                   a.priority as ai_priority, a.category as ai_category,
+                   a.confidence as ai_confidence
             FROM findings f
             JOIN js_files j ON j.id = f.js_file_id
+            LEFT JOIN ai_assessments a ON a.finding_id = f.id
             WHERE j.scope = ?
         """
         params: list = [scope]
@@ -468,12 +473,23 @@ def get_scope_stats(scope: str):
             (scope,)
         ).fetchall()
 
+        ai_triaged = conn.execute(
+            """
+            SELECT COUNT(*) FROM ai_assessments a
+            JOIN findings f ON f.id = a.finding_id
+            JOIN js_files j ON j.id = f.js_file_id
+            WHERE j.scope = ?
+            """,
+            (scope,)
+        ).fetchone()[0]
+
         return {
             "scope": scope,
             "js_file_count": js_count,
             "severity_breakdown": {r["severity"]: r["count"] for r in severity_counts},
             "type_breakdown": {r["type"]: r["count"] for r in type_counts},
             "detected_tech": [{"name": r["tech_name"], "confidence": r["confidence"]} for r in tech_list],
+            "ai_triaged": ai_triaged,
         }
     finally:
         conn.close()
@@ -518,6 +534,37 @@ def _enrich_advisories(advisories) -> list[dict]:
         enriched.append(row)
     return enriched
 
+def _attach_ai_assessments(conn, file_id: int, findings_rows) -> list[dict]:
+    """
+    PRD 8y — merge ai_assessments ke list findings detail /js-file/{id}.
+    recommended_checks (JSON string di DB) di-parse ke list untuk UI.
+    """
+    import json as _json
+
+    ai_rows = conn.execute(
+        """
+        SELECT a.* FROM ai_assessments a
+        JOIN findings f ON f.id = a.finding_id
+        WHERE f.js_file_id=?
+        """,
+        (file_id,),
+    ).fetchall()
+    ai_by_finding = {r["finding_id"]: dict(r) for r in ai_rows}
+
+    merged = []
+    for f in findings_rows:
+        fd = dict(f)
+        ai = ai_by_finding.get(fd["id"])
+        if ai:
+            try:
+                ai["recommended_checks"] = _json.loads(ai.get("recommended_checks") or "[]")
+            except Exception:  # pylint: disable=broad-except
+                ai["recommended_checks"] = []
+            fd["ai_assessment"] = ai
+        merged.append(fd)
+    return merged
+
+
 @app.get("/js-file/{file_id}")
 def get_js_file(file_id: int):
     """Full detail for one JS file: metadata + findings + advisories."""
@@ -552,7 +599,7 @@ def get_js_file(file_id: int):
 
         return {
             "js_file": dict(jsf),
-            "findings": [dict(f) for f in findings],
+            "findings": _attach_ai_assessments(conn, file_id, findings),
             "advisories": _enrich_advisories(advisories),
             "tech_stack": [dict(t) for t in tech],
         }
@@ -622,6 +669,25 @@ def trigger_advisor(scope: str):
     except Exception as exc:
         logger.error("XSS advisor failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/ai-triage/{scope}")
+def trigger_ai_triage(
+    scope: str,
+    limit: int = Query(50, ge=1, le=500),
+    force: bool = Query(False),
+):
+    """
+    PRD 8y — Trigger AI Triage for a scope.
+
+    LLM menilai finding unreviewed (priority 1..5 + kategori + langkah cek
+    manual), hasil = hint bukan verdict (PRD 1a). Sync/blocking seperti
+    advisor. Butuh env JXS_AI_API_KEY — tanpa itu, balikin 400 + hint.
+    """
+    summary = run_ai_triage(scope=scope, db_path=DB_PATH, limit=limit, force=force)
+    if summary.get("status") == "error":
+        raise HTTPException(status_code=400, detail=summary.get("error", "ai triage failed"))
+    return {"status": "done", "summary": summary}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

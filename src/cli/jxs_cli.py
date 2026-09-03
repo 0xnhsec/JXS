@@ -579,6 +579,69 @@ def cmd_review(args: argparse.Namespace) -> int:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# subcommand: triage (PRD 8y — AI Triage Assistant)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def cmd_triage(args: argparse.Namespace) -> int:
+    """LLM prioritization hints untuk finding unreviewed di satu scope (PRD 8y)."""
+    from src.ai_triage.triage import run_ai_triage
+
+    summary = run_ai_triage(
+        scope=args.scope, db_path=DB_PATH, limit=args.limit, force=args.force
+    )
+    if summary.get("status") == "error":
+        print(f"[ERROR] {summary.get('error')}", file=sys.stderr)
+        return 1
+
+    print(f"[jxs triage] scope={summary['scope']} model={summary['model']}")
+    print(f"  assessed : {summary['assessed']}")
+    print(f"  rejected : {summary['rejected']} (evidence gate / schema validation)")
+    print(
+        f"  batches  : {summary['batches']} "
+        f"(retried: {summary['retried_batches']}, failed: {summary['failed_batches']})"
+    )
+    t = summary["tokens"]
+    print(
+        f"  tokens   : {t['total_tokens']} "
+        f"(prompt {t['prompt_tokens']} / completion {t['completion_tokens']})"
+    )
+    for e in summary.get("errors", []):
+        print(f"  warn     : {e}")
+    if summary.get("note"):
+        print(f"  note     : {summary['note']}")
+
+    if summary["assessed"] and not args.no_preview:
+        conn = get_connection(DB_PATH)
+        try:
+            rows = conn.execute(
+                """
+                SELECT a.priority, a.category, a.confidence, f.id AS finding_id,
+                       f.type, f.severity, f.match_value
+                FROM ai_assessments a JOIN findings f ON f.id = a.finding_id
+                JOIN js_files j ON j.id = f.js_file_id
+                WHERE j.scope = ?
+                ORDER BY a.priority ASC, a.confidence DESC
+                LIMIT 10
+                """,
+                (args.scope,),
+            ).fetchall()
+        finally:
+            conn.close()
+        if rows:
+            print("\n  top priorities:")
+            for r in rows:
+                print(
+                    f"   P{r['priority']} [{r['category']}] finding #{r['finding_id']} "
+                    f"({r['type']}/{r['severity']}) {str(r['match_value'])[:60]}"
+                )
+            print(
+                "\n  hint: finding adalah KANDIDAT — jalankan Validation Checklist "
+                "(8u) sebelum report. AI tidak pernah memberi vonis."
+            )
+    return 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Argument parser
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -597,6 +660,8 @@ def build_parser() -> argparse.ArgumentParser:
               jxs export --scope nasa --status confirmed_bug
               jxs export --scope nasa --status confirmed_bug --include-source
               jxs review 42 confirmed_bug --note "innerHTML sink, user-controlled via hash"
+              jxs triage --scope nasa --limit 50
+              jxs triage --scope nasa --force
         """),
     )
     parser.add_argument("--db", default=DB_PATH, help="Path to jxs SQLite DB")
@@ -643,6 +708,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_review.add_argument("status", choices=REVIEW_STATUS_VALUES, help="New review status")
     p_review.add_argument("--note", help="Optional note text")
 
+    # ── triage (PRD 8y) ──────────────────────────────────────────────────────
+    p_triage = sub.add_parser(
+        "triage", help="AI triage: LLM prioritization hints for unreviewed findings (PRD 8y)"
+    )
+    p_triage.add_argument("--scope", required=True, help="Scope name")
+    p_triage.add_argument("--limit", type=int, default=50,
+                          help="Max findings to assess this run (default: 50)")
+    p_triage.add_argument("--force", action="store_true",
+                          help="Re-assess findings that already have AI assessments")
+    p_triage.add_argument("--no-preview", dest="no_preview", action="store_true",
+                          help="Skip top-priority preview table")
+
     return parser
 
 
@@ -669,6 +746,7 @@ def main() -> int:
         "status": cmd_status,
         "export": cmd_export,
         "review": cmd_review,
+        "triage": cmd_triage,
     }
     return dispatch[args.command](args)
 

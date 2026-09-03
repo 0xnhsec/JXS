@@ -32,5 +32,7 @@ export const api = {
   triggerExtract:  (scope)   => request(`/extract/${scope}`, { method: 'POST' }),
   triggerTechstack:(scope)   => request(`/techstack/${scope}`, { method: 'POST' }),
   triggerAdvisor:  (scope)   => request(`/advisor/${scope}`, { method: 'POST' }),
+  triggerAiTriage: (scope, limit = 50, force = false) =>
+    request(`/ai-triage/${scope}?limit=${limit}&force=${force}`, { method: 'POST' }),
   dbStats:      ()           => request('/db/stats'),
 }

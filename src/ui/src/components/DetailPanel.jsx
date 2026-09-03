@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { X, ExternalLink, Copy, ChevronDown, ChevronRight, Shield, AlertTriangle, Info, CheckCircle, ClipboardCheck, ListChecks } from 'lucide-react'
+import { X, ExternalLink, Copy, ChevronDown, ChevronRight, Shield, AlertTriangle, Info, CheckCircle, ClipboardCheck, ListChecks, Sparkles } from 'lucide-react'
 import { api } from '../api'
 import './DetailPanel.css'
 
@@ -89,11 +89,20 @@ const REVIEW_STATUSES = [
   { value: 'reported',      label: '📤 Reported',      color: '#3b82f6' },
 ]
 
-function ReviewWidget({ findingId, initialStatus, initialNote }) {
+function ReviewWidget({ findingId, initialStatus, initialNote, draftNote, draftSeq }) {
   const [status, setStatus] = useState(initialStatus || 'unreviewed')
   const [note, setNote]     = useState(initialNote || '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved]   = useState(false)
+
+  // PRD 8y — AI draft note DI-APPEND ke note existing (tidak menimpa),
+  // dan yang menekan Save tetap manusia — AI tidak pernah submit sendiri.
+  useEffect(() => {
+    if (draftSeq && draftNote) {
+      setNote(prev => (prev ? `${prev}\n${draftNote}` : draftNote))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftSeq])
 
   const save = async () => {
     setSaving(true)
@@ -420,8 +429,84 @@ function ValidationChecklist({ findingId, initialStatus, onStatusChange }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD 8y — AI Assessment card
+// Hint prioritas dari LLM (BUKAN vonis): P1..P5 + kategori + evidence quote
+// (sudah terverifikasi substring dari snippet oleh backend) + langkah cek
+// manual. Confidence < 0.5 ditandai needs_review (PRD 8y.6).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AIAssessmentCard({ ai, onApplyDraft }) {
+  const checks = Array.isArray(ai.recommended_checks) ? ai.recommended_checks : []
+  const needsReview = typeof ai.confidence === 'number' && ai.confidence < 0.5
+  const draftText = [
+    `[AI P${ai.priority} · ${ai.category} · conf ${Math.round((ai.confidence || 0) * 100)}%]`,
+    ai.summary,
+    ...checks.map(c => `- ${c}`),
+  ].filter(Boolean).join('\n')
+
+  return (
+    <div className={`ai-assessment-card ai-card-p${ai.priority}`}>
+      <div className="ai-card-header">
+        <Sparkles size={13} />
+        <span className="ai-card-title">AI Assessment</span>
+        <span className={`ai-badge ai-p${ai.priority}`}>P{ai.priority}</span>
+        <span className="ai-card-category mono">{ai.category}</span>
+        {needsReview && (
+          <span className="ai-needs-review" title="Confidence < 0.5 — perlu verifikasi ekstra (PRD 8y.6)">
+            needs review
+          </span>
+        )}
+      </div>
+
+      <p className="ai-card-summary">{ai.summary}</p>
+
+      {ai.evidence_quote && (
+        <>
+          <div className="detail-label">Evidence (substring snippet — terverifikasi backend)</div>
+          <pre className="ai-evidence mono">{ai.evidence_quote}</pre>
+        </>
+      )}
+
+      {checks.length > 0 && (
+        <>
+          <div className="detail-label">Langkah cek manual</div>
+          <ol className="ai-checks">
+            {checks.map((c, i) => (
+              <li key={i} className="ai-check">{c}</li>
+            ))}
+          </ol>
+        </>
+      )}
+
+      <div className="ai-card-footer">
+        <span className="ai-card-meta">
+          conf {Math.round((ai.confidence || 0) * 100)}%{ai.model ? ` · ${ai.model}` : ''}
+        </span>
+        <button
+          className="btn btn-ghost ai-draft-btn"
+          onClick={() => onApplyDraft(draftText)}
+          title="Isi draft ke note di Review Widget — tetap kamu yang tekan Save"
+        >
+          <ClipboardCheck size={12} /> Pakai sebagai draft note
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function FindingRow({ finding }) {
   const [open, setOpen] = useState(false)
+  const [aiDraft, setAiDraft] = useState(null) // { text, seq } — PRD 8y draft note
+
+  // Detail /js-file/{id} memberi ai_assessment penuh; daftar /findings
+  // memberi field flat (ai_priority/ai_category/ai_confidence) via LEFT JOIN.
+  const ai = finding.ai_assessment
+    ? finding.ai_assessment
+    : finding.ai_priority
+      ? { priority: finding.ai_priority, category: finding.ai_category, confidence: finding.ai_confidence }
+      : null
+
   return (
     <div className={`finding-row finding-sev-${finding.severity} ${open ? 'open' : ''}`}>
       <div className="finding-row-header" onClick={() => setOpen(o => !o)}>
@@ -442,6 +527,15 @@ function FindingRow({ finding }) {
         {finding.review_status && finding.review_status !== 'unreviewed' && (
           <span className={`review-badge review-${finding.review_status}`}>
             {finding.review_status.replace('_', ' ')}
+          </span>
+        )}
+        {/* AI priority badge (PRD 8y) — hint, bukan verdict */}
+        {ai && (
+          <span
+            className={`ai-badge ai-p${ai.priority}`}
+            title={`AI triage: P${ai.priority}${ai.category ? ` · ${ai.category}` : ''}`}
+          >
+            P{ai.priority}
           </span>
         )}
         {/* Stop propagation so copy click doesn't toggle expand */}
@@ -507,11 +601,24 @@ function FindingRow({ finding }) {
             </>
           )}
 
+          {/* AI Assessment (PRD 8y) — sebelum ReviewWidget, karena draft-nya
+              diteruskan ke widget review; verdict tetap di tangan manusia */}
+          {ai && ai.summary && (
+            <AIAssessmentCard
+              ai={ai}
+              onApplyDraft={(text) =>
+                setAiDraft(d => ({ text, seq: (d?.seq || 0) + 1 }))
+              }
+            />
+          )}
+
           {/* Review widget (PRD 8p-1) */}
           <ReviewWidget
             findingId={finding.id}
             initialStatus={finding.review_status}
             initialNote={finding.review_note}
+            draftNote={aiDraft?.text}
+            draftSeq={aiDraft?.seq}
           />
 
           {/* Validation Checklist (PRD 8u) */}
